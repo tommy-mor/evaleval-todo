@@ -139,15 +139,11 @@ def delete(todo_id: str):
 async def sse(request: Request):
 
     async def generate():
-        yield exec_event(
-            One[Eval(f"document.title = 'todos'")]
-        )
-        yield exec_event(
-            Three[Selector("head")][APPEND][["style", STYLE]]
-        )
-        yield exec_event(
-            Three[Selector("body")][MORPH][["body", page()]]
-        )
+        yield exec_event([
+            One[Eval("document.title = 'todos'")],
+            Three[Selector("head")][APPEND][["style", STYLE]],
+            Three[Selector("body")][MORPH][["body", page()]],
+        ])
 
     return StreamingResponse(generate(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
@@ -162,13 +158,9 @@ async def index():
 async def do(request: Request):
     form = await request.form()
     try:
-        return signer.execute_signed_form(
-            form=form,
-            bindings={
-                "add": add,
-                "toggle": toggle,
-                "delete": delete,
-            },
-        )
+        snippet = signer.verify_snippet(form)
+        return eval(snippet)
     except SnippetExecutionError as e:
         return PlainTextResponse(e.message, status_code=e.status_code)
+    except Exception as e:
+        return PlainTextResponse(str(e), status_code=500)
