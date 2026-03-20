@@ -37,12 +37,12 @@ def _find(todo_id: str) -> dict | None:
 def todo_item(t: dict) -> list:
     done_class = "done" if t["done"] else ""
     return ["li", {"id": f"todo-{t['id']}", "class": f"todo-item {done_class}".strip()},
-        ["form.inline", {"action": "/do", "method": "post", "data-reset": "false"},
+        ["form.inline", {"action": "/eval", "method": "post", "data-reset": "false"},
             *signer.snippet_hidden(f"toggle('{t['id']}')"),
             ["button.toggle", {"type": "submit"}, "x" if t["done"] else "o"],
         ],
         ["span.text", t["text"]],
-        ["form.inline", {"action": "/do", "method": "post"},
+        ["form.inline", {"action": "/eval", "method": "post"},
             *signer.snippet_hidden(f"delete('{t['id']}')"),
             ["button.delete", {"type": "submit"}, "del"],
         ],
@@ -55,8 +55,8 @@ def todo_list() -> list:
 
 
 def add_form() -> list:
-    return ["form#add-form", {"action": "/do", "method": "post"},
-        *signer.snippet_hidden("add($text)"),
+    return ["form#add-form", {"action": "/eval", "method": "post"},
+        *signer.snippet_hidden("print('arstar'); add($text)"),
         ["input", {"type": "text", "name": "text", "placeholder": "what needs doing?", "autofocus": "true"}],
         ["button", {"type": "submit"}, "add"],
     ]
@@ -96,7 +96,7 @@ button[type="submit"] { font-family: monospace; padding: 0.3em 0.8em; cursor: po
 def add(text: str):
     text = text.strip()
     if not text:
-        return PlainTextResponse("", status_code=204)
+        return PlainTextResponse(Three[Selector("#add-form")][MORPH][add_form()], status_code=204)
     t = {"id": uuid.uuid4().hex[:8], "text": text, "done": False}
     TODOS.append(t)
     return PlainTextResponse(
@@ -160,7 +160,7 @@ async def index():
     return HTMLResponse(shell_html())
 
 
-@app.post("/do")
+@app.post("/eval")
 async def do(request: Request):
     form = await request.form()
     try:
