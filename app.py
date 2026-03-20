@@ -13,7 +13,9 @@ from starlette.responses import StreamingResponse
 
 from strophe import (
     Signer, SnippetExecutionError, exec_event, shell_html,
-    One, Two, Three,
+
+    One, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten,
+
     Selector, Eval, MORPH, APPEND, REMOVE,
 )
 
