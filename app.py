@@ -1,5 +1,5 @@
 """
-Todo list app — strophe demo.
+Todo list app — evaleval demo.
 
     uv run uvicorn app:app --reload
 """
@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from starlette.responses import StreamingResponse
 
-from strophe import (
+from evaleval import (
     Signer, SnippetExecutionError, exec_event, shell_html,
 
     One, Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten,
@@ -56,7 +56,7 @@ def todo_list() -> list:
 
 def add_form() -> list:
     return ["form#add-form", {"action": "/","method": "post"},
-        *signer.snippet_hidden("print('arstar'); add($text)"),
+        *signer.snippet_hidden("(print('form callback for add todo', $text), add($text))[1]"),
         ["input", {"type": "text", "name": "text", "placeholder": "what needs doing?", "autofocus": "true"}],
         ["button", {"type": "submit"}, "add"],
     ]

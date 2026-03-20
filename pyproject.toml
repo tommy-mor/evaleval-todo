@@ -1,14 +1,12 @@
 [project]
-name = "strophe-todo"
+name = "evaleval-todo"
 version = "0.1.0"
-description = "Todo list app built with strophe — signed snippets, hiccup, dual-eval loop."
+description = "Todo list app built with evaleval — signed snippets, hiccup, dual-eval loop."
 requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.104.0",
     "uvicorn>=0.24.0",
     "python-multipart>=0.0.9",
-    "strophe>=0.1.0",
+    "evaleval>=0.2.3",
 ]
 
-[tool.uv.sources]
-strophe = { path = "../poem", editable = true }
