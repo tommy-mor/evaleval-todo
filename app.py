@@ -8,12 +8,12 @@ import uuid
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse
+from starlette.responses import StreamingResponse
 
-from poem import (
-    Signer, exec_event, shell_html,
-    apply_snippet_substitutions,
-    One, Three,
-    Selector, Eval, MORPH,
+from strophe import (
+    Signer, SnippetExecutionError, exec_event, shell_html,
+    One, Two, Three,
+    Selector, Eval, MORPH, APPEND, REMOVE,
 )
 
 app = FastAPI()
@@ -30,20 +30,17 @@ def _find(todo_id: str) -> dict | None:
 
 # --- Hiccup components ---
 
-def snippet_hidden(code: str) -> list:
-    return signer.snippet_hidden(code)
-
 
 def todo_item(t: dict) -> list:
     done_class = "done" if t["done"] else ""
     return ["li", {"id": f"todo-{t['id']}", "class": f"todo-item {done_class}".strip()},
         ["form.inline", {"action": "/do", "method": "post", "data-reset": "false"},
-            *snippet_hidden(f"toggle('{t['id']}')"),
+            *signer.snippet_hidden(f"toggle('{t['id']}')"),
             ["button.toggle", {"type": "submit"}, "x" if t["done"] else "o"],
         ],
         ["span.text", t["text"]],
         ["form.inline", {"action": "/do", "method": "post"},
-            *snippet_hidden(f"delete('{t['id']}')"),
+            *signer.snippet_hidden(f"delete('{t['id']}')"),
             ["button.delete", {"type": "submit"}, "del"],
         ],
     ]
@@ -56,19 +53,23 @@ def todo_list() -> list:
 
 def add_form() -> list:
     return ["form#add-form", {"action": "/do", "method": "post"},
-        *snippet_hidden("add($text)"),
+        *signer.snippet_hidden("add($text)"),
         ["input", {"type": "text", "name": "text", "placeholder": "what needs doing?", "autofocus": "true"}],
         ["button", {"type": "submit"}, "add"],
     ]
 
 
-def page() -> list:
+def remaining_count() -> list:
     count = len([t for t in TODOS if not t["done"]])
+    return ["p.count", f"{count} remaining"]
+
+
+def page() -> list:
     return ["div#app",
         ["h1", "todos"],
         add_form(),
         todo_list(),
-        ["p.count", f"{count} remaining"],
+        remaining_count(),
     ]
 
 
@@ -93,9 +94,13 @@ def add(text: str):
     text = text.strip()
     if not text:
         return PlainTextResponse("", status_code=204)
-    TODOS.append({"id": uuid.uuid4().hex[:8], "text": text, "done": False})
+    t = {"id": uuid.uuid4().hex[:8], "text": text, "done": False}
+    TODOS.append(t)
     return PlainTextResponse(
-        Three[Selector("#app")][MORPH][page()],
+        ";".join([
+            Three[Selector("#todo-list")][APPEND][todo_item(t)],
+            Three[Selector("p.count")][MORPH][remaining_count()],
+        ]),
         status_code=200,
     )
 
@@ -106,7 +111,10 @@ def toggle(todo_id: str):
         return PlainTextResponse("not found", status_code=404)
     t["done"] = not t["done"]
     return PlainTextResponse(
-        Three[Selector("#app")][MORPH][page()],
+        ";".join([
+            Three[Selector(f"#todo-{todo_id}")][MORPH][todo_item(t)],
+            Three[Selector("p.count")][MORPH][remaining_count()],
+        ]),
         status_code=200,
     )
 
@@ -117,30 +125,25 @@ def delete(todo_id: str):
         return PlainTextResponse("not found", status_code=404)
     TODOS.remove(t)
     return PlainTextResponse(
-        Three[Selector("#app")][MORPH][page()],
+        ";".join([
+            Two[Selector(f"#todo-{todo_id}")][REMOVE],
+            Three[Selector("p.count")][MORPH][remaining_count()],
+        ]),
         status_code=200,
     )
-
-
-SANDBOX = {
-    "add": add,
-    "toggle": toggle,
-    "delete": delete,
-}
 
 
 # --- Routes ---
 
 @app.get("/sse")
 async def sse(request: Request):
-    from starlette.responses import StreamingResponse
 
     async def generate():
         yield exec_event(
             One[Eval(f"document.title = 'todos'")]
         )
         yield exec_event(
-            f"document.head.insertAdjacentHTML('beforeend', `<style>{STYLE}</style>`)"
+            Three[Selector("head")][APPEND][["style", STYLE]]
         )
         yield exec_event(
             Three[Selector("body")][MORPH][["body", page()]]
@@ -158,22 +161,14 @@ async def index():
 @app.post("/do")
 async def do(request: Request):
     form = await request.form()
-
-    snippet = form.get("__snippet__", "")
-    sig = form.get("__sig__", "")
-    nonce = form.get("__nonce__", "")
-
-    if not all([snippet, sig, nonce]):
-        return PlainTextResponse("Missing fields", status_code=400)
-    if not signer.verify(snippet, nonce, sig):
-        return PlainTextResponse("Invalid signature", status_code=403)
-    if not signer.consume_nonce(nonce):
-        return PlainTextResponse("Invalid nonce", status_code=403)
-
-    form_data = {k: str(v) for k, v in form.items() if not k.startswith("__")}
-    snippet = apply_snippet_substitutions(snippet, form_data)
-
     try:
-        return eval(snippet, {"__builtins__": {}}, SANDBOX)
-    except Exception as e:
-        return PlainTextResponse(str(e), status_code=500)
+        return signer.execute_signed_form(
+            form=form,
+            bindings={
+                "add": add,
+                "toggle": toggle,
+                "delete": delete,
+            },
+        )
+    except SnippetExecutionError as e:
+        return PlainTextResponse(e.message, status_code=e.status_code)
